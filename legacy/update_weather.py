@@ -29,28 +29,28 @@ root = tk.Tk()
 root.withdraw()
 
 # 如果没有 key，就弹窗输入
-if not config.has_option('DEFAULT', 'key') or not config.get('DEFAULT', 'key'):
+if not config.has_option('weather', 'key') or not config.get('weather', 'key'):
     key = simpledialog.askstring("请输入 Key", "请输入你的和风天气 API key：")
     if not key:
         messagebox.showerror('错误', "未填写和风天气 API key")
         exit()
-    if not config.has_section('DEFAULT'):
-        config.add_section('DEFAULT')
-    config.set('DEFAULT', 'key', key)
+    if not config.has_section('weather'):
+        config.add_section('weather')
+    config.set('weather', 'key', key)
 else:
-    key = config.get('DEFAULT', 'key')
+    key = config.get('weather', 'key')
 
 # 如果没有 location，就弹窗输入
-if not config.has_option('DEFAULT', 'location') or not config.get('DEFAULT', 'location'):
+if not config.has_option('weather', 'location') or not config.get('weather', 'location'):
     location = simpledialog.askstring("请输入 Location", "请输入你的城市：")
     if not location:
         messagebox.showerror('错误', "未填写 'location' 参数")
         exit()
-    if not config.has_section('DEFAULT'):
-        config.add_section('DEFAULT')
-    config.set('DEFAULT', 'location', location)
+    if not config.has_section('weather'):
+        config.add_section('weather')
+    config.set('weather', 'location', location)
 else:
-    location = config.get('DEFAULT', 'location')
+    location = config.get('weather', 'location')
 
 # 保存回 config.ini
 with open(CONFIG_PATH, "w", encoding="utf-8") as f:

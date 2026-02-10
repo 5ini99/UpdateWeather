@@ -11,8 +11,9 @@ def start_tray():
         pystray.MenuItem("立即刷新", lambda i, _: run_refresh_async()),
         pystray.MenuItem("设置", lambda i, _: launch_gui_process()),
         pystray.MenuItem(
-            lambda _: "取消自启" if is_autostart_enabled() else "开机自启",
-            toggle_autostart
+            "开机自启",
+            toggle_autostart,
+            checked=lambda item: is_autostart_enabled()
         ),
         pystray.MenuItem("退出", lambda i, _: i.stop())
     )

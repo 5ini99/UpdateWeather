@@ -43,7 +43,7 @@
 
 1. **备份配置文件**（可选）
    ```bash
-   cp ~/.updateweather/config.ini ~/config_backup.ini
+   cp ~/.update-weather/config.ini ~/config_backup.ini
    ```
 
 2. **替换文件**

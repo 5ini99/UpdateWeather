@@ -12,7 +12,7 @@ LEGACY_SCRIPT = os.path.join(BASE_DIR, "legacy", "update_weather.py")
 
 def fetch_weather():
     """
-    执行你原来的 updateweather 脚本
+    执行你原来的 update-weather 脚本
     = 真正干活的核心
     """
     if not os.path.exists(LEGACY_SCRIPT):

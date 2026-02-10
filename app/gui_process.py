@@ -2,6 +2,7 @@
 """
 完整的配置 GUI 实现（独立进程运行）
 """
+import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox
 import os
@@ -9,6 +10,8 @@ import sys
 import subprocess
 from pathlib import Path
 import webbrowser
+
+from app.state_file import get_next_refresh_time
 
 # 取得本文件 (gui_process.py) 所在的目录 → app/
 this_file_dir = Path(__file__).resolve().parent
@@ -25,7 +28,7 @@ os.chdir(project_root)
 
 from app.config import CONFIG, CONFIG_SCHEMA
 
-LOCK_FILE = Path.home() / ".updateweather" / "gui.lock"
+LOCK_FILE = Path.home() / ".update-weather" / "gui.lock"
 LOCK_FILE.parent.mkdir(exist_ok=True)
 
 # ================== 单实例管理 ==================
@@ -73,10 +76,6 @@ def activate_existing_gui(pid: int):
         else:
             err_msg = result.stderr.strip() or "未知错误"
             print(f"激活失败: {err_msg}")
-            # 如果反复失败，可以在这里强制清理锁文件（可选，视情况开启）
-            # if "无效的索引" in err_msg:
-            #     LOCK_FILE.unlink(missing_ok=True)
-            #     print("强制清理残留锁文件")
     except Exception as e:
         print(f"激活过程中异常: {e}")
 
@@ -110,67 +109,94 @@ class ConfigGUI:
     def __init__(self, root):
         self.root = root
         self.widgets = {}
-        self.tabs_created = set()
 
         main_frame = ttk.Frame(root, padding="10")
         main_frame.pack(fill="both", expand=True)
 
-        title = ttk.Label(main_frame, text="UpdateWeather 配置", font=("Helvetica", 16, "bold"))
-        title.pack(pady=(0, 15))
+        self.status_label = ttk.Label(
+            main_frame,
+            text="加载中...",
+            font=("Helvetica", 14, "bold"),
+            foreground="#333333"
+        )
+        self.status_label.pack(pady=(0, 15))
 
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.pack(fill="both", expand=True)
 
-        self.refresh_frame = ttk.Frame(self.notebook, padding="20")
-        self.night_frame = ttk.Frame(self.notebook, padding="20")
-        self.weather_frame = ttk.Frame(self.notebook, padding="20")
-        self.mail_frame = ttk.Frame(self.notebook, padding="20")
+        # 一次性创建所有 Tab 内容（最快、最稳）
+        self.create_refresh_tab()
+        self.create_night_tab()
+        self.create_weather_tab()
+        self.create_mail_tab()
 
-        self.notebook.add(self.refresh_frame, text="刷新设置")
-        self.notebook.add(self.night_frame, text="夜间模式")
-        self.notebook.add(self.weather_frame, text="天气配置")
-        self.notebook.add(self.mail_frame, text="邮件通知")
-
-        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
-
+        # 按钮区域
         btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(pady=(15, 0))
+        btn_frame.pack(pady=(15, 15))
 
-        save_btn = ttk.Button(btn_frame, text="保存配置", command=self.save_config, width=15)
+        save_btn = ttk.Button(
+            btn_frame,
+            text="保存配置",
+            command=self.save_config,
+            width=15
+        )
         save_btn.pack(side="left", padx=5)
 
-        cancel_btn = ttk.Button(btn_frame, text="取消", command=root.destroy, width=15)
+        cancel_btn = ttk.Button(
+            btn_frame,
+            text="取消",
+            command=self.cancel,
+            width=15
+        )
         cancel_btn.pack(side="left", padx=5)
 
-        self.on_tab_changed(None)
+        # 窗口打开后立即更新状态
+        self.update_status_label()
 
-    def on_tab_changed(self, event):
-        current_tab = self.notebook.select()
-        tab_text = self.notebook.tab(current_tab, "text")
+        # 每 10 秒刷新一次状态（避免频繁刷新导致卡顿）
+        self.root.after(10000, self.periodic_update_status)
 
-        if tab_text == "刷新设置" and "refresh" not in self.tabs_created:
-            self.create_refresh_tab(self.refresh_frame)
-            self.tabs_created.add("refresh")
-        elif tab_text == "夜间模式" and "night" not in self.tabs_created:
-            self.create_night_tab(self.night_frame)
-            self.tabs_created.add("night")
-        elif tab_text == "天气配置" and "weather" not in self.tabs_created:
-            self.create_weather_tab(self.weather_frame)
-            self.tabs_created.add("weather")
-        elif tab_text == "邮件通知" and "mail" not in self.tabs_created:
-            self.create_mail_tab(self.mail_frame)
-            self.tabs_created.add("mail")
+    def update_status_label(self):
+        try:
+            from app.state_file import get_next_refresh_time
 
-    # create_xxx_tab 函数保持不变（你之前的版本已经很好）
+            next_time = get_next_refresh_time()
 
-    def create_refresh_tab(self, frame):
+            if next_time is None:
+                next_str = "未设置（调度器启动中...）"
+                status = "服务初始化中"
+                color = "orange"
+            else:
+                now = datetime.datetime.now()
+                next_str = next_time.strftime("%Y-%m-%d %H:%M")
+                if next_time > now:
+                    status = "服务运行中"
+                    color = "green"
+                else:
+                    status = "已过期（即将刷新）"
+                    color = "orange"
+
+            text = f"下次刷新：{next_str}   |   {status}"
+            self.status_label.config(text=text, foreground=color)
+        except Exception as e:
+            self.status_label.config(text=f"读取状态失败：{str(e)}", foreground="red")
+
+    def periodic_update_status(self):
+        """定时更新状态"""
+        self.update_status_label()
+        self.root.after(10000, self.periodic_update_status)  # 每 10 秒一次
+        
+    def create_refresh_tab(self):
+        frame = ttk.Frame(self.notebook, padding="20")
+        self.notebook.add(frame, text="刷新设置")
+
         ttk.Label(frame, text="刷新间隔（分钟）:", font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=10)
         interval_var = tk.IntVar(value=CONFIG.refresh_interval_minutes)
         interval_spin = ttk.Spinbox(frame, from_=1, to=1440, textvariable=interval_var, width=15)
         interval_spin.grid(row=0, column=1, padx=20, pady=10)
         ttk.Label(frame, text="建议: 30-120 分钟", foreground="gray").grid(row=1, column=1, sticky="w", padx=20)
 
-        # 新增开关
+        # 每天 0 点强制刷新开关
         midnight_var = tk.BooleanVar(value=CONFIG.force_refresh_at_midnight)
         midnight_check = ttk.Checkbutton(
             frame,
@@ -189,7 +215,10 @@ class ConfigGUI:
         self.widgets["refresh.interval_minutes"] = interval_var
         self.widgets["refresh.force_refresh_at_midnight"] = midnight_var
 
-    def create_night_tab(self, frame):
+    def create_night_tab(self):
+        frame = ttk.Frame(self.notebook, padding="20")
+        self.notebook.add(frame, text="夜间模式")
+
         skip_var = tk.BooleanVar(value=CONFIG.skip_night)
         skip_check = ttk.Checkbutton(frame, text="夜间暂停刷新", variable=skip_var)
         skip_check.grid(row=0, column=0, columnspan=2, sticky="w", pady=10)
@@ -210,8 +239,11 @@ class ConfigGUI:
         self.widgets["night.night_start"] = start_var
         self.widgets["night.night_end"] = end_var
 
-    def create_weather_tab(self, frame):
-        ttk.Label(frame, text="天气 API Key:", font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=10)
+    def create_weather_tab(self):
+        frame = ttk.Frame(self.notebook, padding="20")
+        self.notebook.add(frame, text="天气配置")
+
+        ttk.Label(frame, text="天气 API Key:", font=("Helvetica", 11)).grid(row=0, column=0, sticky="w", pady=10)
         key_var = tk.StringVar(value=CONFIG.weather_key)
         key_entry = ttk.Entry(frame, textvariable=key_var, width=35)
         key_entry.grid(row=0, column=1, padx=20, pady=10, sticky="w")
@@ -251,7 +283,10 @@ class ConfigGUI:
         self.widgets["weather.key"] = key_var
         self.widgets["weather.location"] = loc_var
 
-    def create_mail_tab(self, frame):
+    def create_mail_tab(self):
+        frame = ttk.Frame(self.notebook, padding="20")
+        self.notebook.add(frame, text="邮件通知")
+
         enabled_var = tk.BooleanVar(value=CONFIG.mail_enabled)
         enabled_check = ttk.Checkbutton(frame, text="启用邮件通知", variable=enabled_var, state="disabled")
         enabled_check.grid(row=0, column=0, sticky="w", pady=10)
@@ -263,21 +298,18 @@ class ConfigGUI:
     def save_config(self):
         """保存所有配置"""
         try:
-            # 只保存已创建的控件对应的值
-            if "refresh.interval_minutes" in self.widgets:
-                CONFIG.set("refresh", "interval_minutes", self.widgets["refresh.interval_minutes"].get())
+            # 所有控件都已创建，可以直接取值
+            CONFIG.set("refresh", "interval_minutes", self.widgets["refresh.interval_minutes"].get())
+            CONFIG.set("refresh", "force_refresh_at_midnight", self.widgets["refresh.force_refresh_at_midnight"].get())
 
-            if "night.skip_night" in self.widgets:
-                CONFIG.set("night", "skip_night", self.widgets["night.skip_night"].get())
-                CONFIG.set("night", "night_start", self.widgets["night.night_start"].get())
-                CONFIG.set("night", "night_end", self.widgets["night.night_end"].get())
+            CONFIG.set("night", "skip_night", self.widgets["night.skip_night"].get())
+            CONFIG.set("night", "night_start", self.widgets["night.night_start"].get())
+            CONFIG.set("night", "night_end", self.widgets["night.night_end"].get())
 
-            if "weather.key" in self.widgets:
-                CONFIG.set("weather", "key", self.widgets["weather.key"].get())
-                CONFIG.set("weather", "location", self.widgets["weather.location"].get())
+            CONFIG.set("weather", "key", self.widgets["weather.key"].get())
+            CONFIG.set("weather", "location", self.widgets["weather.location"].get())
 
-            if "mail.enabled" in self.widgets:
-                CONFIG.set("mail", "enabled", self.widgets["mail.enabled"].get())
+            CONFIG.set("mail", "enabled", self.widgets["mail.enabled"].get())
 
             # 通知调度器重新计算
             try:
@@ -293,7 +325,11 @@ class ConfigGUI:
 
         except Exception as e:
             messagebox.showerror("错误", f"保存配置失败:\n{e}")
-            remove_lock()  # 异常时也清理
+            remove_lock()
+
+    def cancel(self):
+        remove_lock()
+        self.root.destroy()
 
     def open_url(self, url: str):
         try:
@@ -340,13 +376,20 @@ def launch_gui_process():
         return
 
     from pathlib import Path
-    root_dir = Path(__file__).resolve().parent.parent
+    root_dir = Path(__file__).resolve().parent.parent  # gui_process.py → app → root
 
     gui_script = root_dir / "app" / "gui_process.py"
+
+    # 强制设置 PYTHONPATH 环境变量，让子进程能找到 app 包
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root_dir) + os.pathsep + env.get("PYTHONPATH", "")
+
+    print(f"[Launch] 以 PYTHONPATH={env['PYTHONPATH']} 启动 GUI，cwd={root_dir}")
 
     subprocess.Popen(
         [sys.executable, str(gui_script)],
         cwd=str(root_dir),
+        env=env,  # ← 关键：传修改后的环境变量
         start_new_session=True,
     )
 

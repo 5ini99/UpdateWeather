@@ -99,7 +99,7 @@ UpdateWeather/
 
 ## ⚙️ 配置文件
 
-配置文件位置：`~/.updateweather/config.ini`
+配置文件位置：`~/.update-weather/config.ini`
 
 程序首次运行会自动创建默认配置文件。
 
@@ -158,13 +158,13 @@ enabled = true
 
 ```bash
 # 删除锁文件重试
-rm ~/.updateweather/gui.lock
+rm ~/.update-weather/gui.lock
 ```
 
 ### 配置修改不生效
 
 - 检查是否点击了「保存配置」按钮
-- 查看 `~/.updateweather/config.ini` 是否已更新
+- 查看 `~/.update-weather/config.ini` 是否已更新
 - 等待 30 秒（调度器检查间隔）
 
 ### 托盘图标不显示

@@ -1,12 +1,12 @@
 # app/refresh_impl.py
+from pathlib import Path
 import threading
 import datetime
 import os
 import subprocess
-from app.state import STATE
 from app.refresh_core import fetch_weather, update_cache, send_mail
 
-LOG_DIR = os.path.expanduser("~/Library/Logs/UpdateWeather")
+LOG_DIR = Path.home() / ".update-weather"
 LOG_FILE = os.path.join(LOG_DIR, "refresh.log")
 
 _refresh_lock = threading.Lock()
@@ -49,9 +49,6 @@ def _do_refresh():
     """
     _log("开始执行：立即刷新")
 
-    with STATE.lock:
-        STATE.is_refreshing = True
-
     try:
         fetch_weather()
         update_cache()
@@ -63,20 +60,12 @@ def _do_refresh():
             message="天气刷新完成"
         )
 
-        with STATE.lock:
-            STATE.last_refresh_time = datetime.datetime.now()
-
     except Exception as e:
         _log(f"刷新失败 ✘ {e}")
         notify_macos(
             title="UpdateWeather",
             message="天气刷新失败，请查看日志"
         )
-
-    finally:
-        with STATE.lock:
-            STATE.is_refreshing = False
-
 
 def run_refresh_async():
     """

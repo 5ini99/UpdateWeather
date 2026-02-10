@@ -16,7 +16,7 @@ import tkinter.simpledialog as simpledialog
 
 config = configparser.ConfigParser()
 
-USER_CONFIG_DIR = Path.home() / ".updateweather"
+USER_CONFIG_DIR = Path.home() / ".update-weather"
 USER_CONFIG_DIR.mkdir(exist_ok=True)
 CONFIG_PATH = USER_CONFIG_DIR / "config.ini"
 

@@ -4,7 +4,7 @@ import configparser
 import threading
 
 # ================== 路径 ==================
-USER_CONFIG_DIR = Path.home() / ".updateweather"
+USER_CONFIG_DIR = Path.home() / ".update-weather"
 USER_CONFIG_DIR.mkdir(exist_ok=True)
 
 CONFIG_PATH = USER_CONFIG_DIR / "config.ini"
@@ -58,7 +58,7 @@ CONFIG_SCHEMA = {
     "mail": {
         "enabled": {
             "type": bool,
-            "default": True,
+            "default": False,
             "label": "启用邮件通知",
         },
     },

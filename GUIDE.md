@@ -156,7 +156,7 @@ python3 main.py
 
 ### 技巧 3：配置文件位置
 
-配置保存在：`~/.updateweather/config.ini`
+配置保存在：`~/.update-weather/config.ini`
 
 你可以：
 - 手动编辑配置文件（高级用户）
@@ -168,7 +168,7 @@ python3 main.py
 修改配置并保存后，可以：
 1. 打开配置文件查看是否已更新
    ```bash
-   cat ~/.updateweather/config.ini
+   cat ~/.update-weather/config.ini
    ```
 2. 等待下次刷新，观察刷新间隔是否符合预期
 
@@ -180,21 +180,21 @@ python3 main.py
 
 **A:** 删除锁文件重试：
 ```bash
-rm ~/.updateweather/gui.lock
+rm ~/.update-weather/gui.lock
 ```
 
 ### Q2: 修改配置后不生效？
 
 **A:** 确认以下几点：
 1. 是否点击了「保存配置」按钮
-2. 配置文件是否已更新（查看 `~/.updateweather/config.ini`）
+2. 配置文件是否已更新（查看 `~/.update-weather/config.ini`）
 3. 等待 30 秒让调度器检测到变更
 
 ### Q3: 如何恢复默认配置？
 
 **A:** 删除配置文件，程序会自动创建默认配置：
 ```bash
-rm ~/.updateweather/config.ini
+rm ~/.update-weather/config.ini
 ```
 
 ### Q4: 托盘图标不显示？
@@ -334,10 +334,10 @@ enabled = true
 
 ```bash
 # 打开配置文件
-nano ~/.updateweather/config.ini
+nano ~/.update-weather/config.ini
 
 # 或使用你喜欢的编辑器
-vim ~/.updateweather/config.ini
+vim ~/.update-weather/config.ini
 ```
 
 ### 批量部署
@@ -346,11 +346,11 @@ vim ~/.updateweather/config.ini
 
 ```bash
 # 复制配置文件
-cp ~/.updateweather/config.ini ~/config_backup.ini
+cp ~/.update-weather/config.ini ~/config_backup.ini
 
 # 在新电脑上恢复
-mkdir -p ~/.updateweather
-cp ~/config_backup.ini ~/.updateweather/config.ini
+mkdir -p ~/.update-weather
+cp ~/config_backup.ini ~/.update-weather/config.ini
 ```
 
 ### 命令行测试

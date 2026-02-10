@@ -107,7 +107,7 @@ python3 check_integrity.py
 
 **A:** 删除锁文件重试：
 ```bash
-rm ~/.updateweather/gui.lock
+rm ~/.update-weather/gui.lock
 ```
 
 ### Q: 找不到 tkinter？

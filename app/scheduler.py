@@ -1,4 +1,7 @@
 # app/scheduler.py
+"""
+后台刷新调度器（支持配置热重载）
+"""
 import time
 import datetime
 
@@ -33,18 +36,31 @@ def _calc_next_time(now: datetime.datetime) -> datetime.datetime:
 def start_scheduler():
     """
     后台调度线程（常驻）
+    
+    支持配置热重载：
+    - 监听 STATE.config_changed 标志
+    - 配置变更后自动重新计算刷新时间
     """
     last_force_refresh_date = None
 
     while True:
         now = datetime.datetime.now()
 
+        # ---------- 检查配置变更 ----------
+        with STATE.lock:
+            if STATE.config_changed:
+                print("[Scheduler] 检测到配置变更，重新计算刷新时间")
+                STATE.config_changed = False
+                STATE.next_refresh_time = None  # 强制重新计算
+
         # ---------- 0 点强制刷新（每天一次） ----------
-        if now.hour == 0:
-            today = now.date()
-            if last_force_refresh_date != today:
-                run_refresh_async()
-                last_force_refresh_date = today
+        # 在 start_scheduler() 的 0 点强制刷新逻辑前加判断
+        if CONFIG.force_refresh_at_midnight:
+            if now.hour == 0:
+                today = now.date()
+                if last_force_refresh_date != today:
+                    run_refresh_async()
+                    last_force_refresh_date = today
 
         # ---------- 正常刷新逻辑 ----------
         if not _is_night(now):

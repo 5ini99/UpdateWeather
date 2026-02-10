@@ -1,61 +1,102 @@
+# app/gui_process.py
+"""
+完整的配置 GUI 实现（独立进程运行）
+"""
 import tkinter as tk
+from tkinter import ttk, messagebox
 import os
 import sys
-import time
 import subprocess
 from pathlib import Path
+import webbrowser
+
+# 取得本文件 (gui_process.py) 所在的目录 → app/
+this_file_dir = Path(__file__).resolve().parent
+
+# 取得项目根目录（app/ 的上层）
+project_root = this_file_dir.parent
+
+# 如果项目根目录还没在 sys.path 里，加进去（优先位置）
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# 同时强制把 cwd 也设成根目录（双保险）
+os.chdir(project_root)
+
+from app.config import CONFIG, CONFIG_SCHEMA
 
 LOCK_FILE = Path.home() / ".updateweather" / "gui.lock"
 LOCK_FILE.parent.mkdir(exist_ok=True)
 
+# ================== 单实例管理 ==================
+def is_gui_running():
+    """检查是否有存活的 GUI 进程"""
+    if not LOCK_FILE.exists():
+        return None
+
+    try:
+        pid_str = LOCK_FILE.read_text().strip()
+        if not pid_str.isdigit():
+            raise ValueError("锁文件内容不是有效 PID")
+        pid = int(pid_str)
+    except Exception as e:
+        print(f"锁文件无效或损坏，自动清理: {e}")
+        LOCK_FILE.unlink(missing_ok=True)
+        return None
+
+    try:
+        os.kill(pid, 0)  # 检查进程是否存在
+        return pid
+    except OSError:
+        print(f"旧 GUI 进程 (pid={pid}) 已不存在，清理锁文件")
+        LOCK_FILE.unlink(missing_ok=True)
+        return None
+
 
 def activate_existing_gui(pid: int):
-    """
-    尝试把已有 GUI 窗口拉到前台（macOS）
-    """
+    """尝试激活旧窗口，失败时打印日志但不影响新窗口"""
+    print(f"检测到已有实例 (pid={pid})，尝试激活...")
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "osascript",
                 "-e",
                 f'tell application "System Events" to set frontmost of the first process whose unix id is {pid} to true'
             ],
-            check=False
+            check=False,
+            timeout=4,
+            capture_output=True,
+            text=True
         )
-    except Exception:
-        pass
-
-
-def is_gui_running():
-    """
-    如果锁文件存在且 pid 存活，返回 pid
-    """
-    if not LOCK_FILE.exists():
-        return None
-
-    try:
-        pid = int(LOCK_FILE.read_text().strip())
-    except Exception:
-        LOCK_FILE.unlink(missing_ok=True)
-        return None
-
-    try:
-        os.kill(pid, 0)
-        return pid
-    except OSError:
-        LOCK_FILE.unlink(missing_ok=True)
-        return None
+        if result.returncode == 0:
+            print("激活成功")
+        else:
+            err_msg = result.stderr.strip() or "未知错误"
+            print(f"激活失败: {err_msg}")
+            # 如果反复失败，可以在这里强制清理锁文件（可选，视情况开启）
+            # if "无效的索引" in err_msg:
+            #     LOCK_FILE.unlink(missing_ok=True)
+            #     print("强制清理残留锁文件")
+    except Exception as e:
+        print(f"激活过程中异常: {e}")
 
 
 def write_lock():
     LOCK_FILE.write_text(str(os.getpid()))
+    print(f"写入锁文件: pid={os.getpid()}")
 
 
 def remove_lock():
-    LOCK_FILE.unlink(missing_ok=True)
+    """安全清理锁文件"""
+    try:
+        LOCK_FILE.unlink(missing_ok=True)
+        print("锁文件已清理")
+    except Exception as e:
+        print(f"清理锁文件失败: {e}")
 
 
 def center_window(root, width, height):
+    """窗口居中"""
     root.update_idletasks()
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
@@ -64,6 +105,203 @@ def center_window(root, width, height):
     root.geometry(f"{width}x{height}+{x}+{y}")
 
 
+# ================== 配置界面构建 ==================
+class ConfigGUI:
+    def __init__(self, root):
+        self.root = root
+        self.widgets = {}
+        self.tabs_created = set()
+
+        main_frame = ttk.Frame(root, padding="10")
+        main_frame.pack(fill="both", expand=True)
+
+        title = ttk.Label(main_frame, text="UpdateWeather 配置", font=("Helvetica", 16, "bold"))
+        title.pack(pady=(0, 15))
+
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill="both", expand=True)
+
+        self.refresh_frame = ttk.Frame(self.notebook, padding="20")
+        self.night_frame = ttk.Frame(self.notebook, padding="20")
+        self.weather_frame = ttk.Frame(self.notebook, padding="20")
+        self.mail_frame = ttk.Frame(self.notebook, padding="20")
+
+        self.notebook.add(self.refresh_frame, text="刷新设置")
+        self.notebook.add(self.night_frame, text="夜间模式")
+        self.notebook.add(self.weather_frame, text="天气配置")
+        self.notebook.add(self.mail_frame, text="邮件通知")
+
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=(15, 0))
+
+        save_btn = ttk.Button(btn_frame, text="保存配置", command=self.save_config, width=15)
+        save_btn.pack(side="left", padx=5)
+
+        cancel_btn = ttk.Button(btn_frame, text="取消", command=root.destroy, width=15)
+        cancel_btn.pack(side="left", padx=5)
+
+        self.on_tab_changed(None)
+
+    def on_tab_changed(self, event):
+        current_tab = self.notebook.select()
+        tab_text = self.notebook.tab(current_tab, "text")
+
+        if tab_text == "刷新设置" and "refresh" not in self.tabs_created:
+            self.create_refresh_tab(self.refresh_frame)
+            self.tabs_created.add("refresh")
+        elif tab_text == "夜间模式" and "night" not in self.tabs_created:
+            self.create_night_tab(self.night_frame)
+            self.tabs_created.add("night")
+        elif tab_text == "天气配置" and "weather" not in self.tabs_created:
+            self.create_weather_tab(self.weather_frame)
+            self.tabs_created.add("weather")
+        elif tab_text == "邮件通知" and "mail" not in self.tabs_created:
+            self.create_mail_tab(self.mail_frame)
+            self.tabs_created.add("mail")
+
+    # create_xxx_tab 函数保持不变（你之前的版本已经很好）
+
+    def create_refresh_tab(self, frame):
+        ttk.Label(frame, text="刷新间隔（分钟）:", font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=10)
+        interval_var = tk.IntVar(value=CONFIG.refresh_interval_minutes)
+        interval_spin = ttk.Spinbox(frame, from_=1, to=1440, textvariable=interval_var, width=15)
+        interval_spin.grid(row=0, column=1, padx=20, pady=10)
+        ttk.Label(frame, text="建议: 30-120 分钟", foreground="gray").grid(row=1, column=1, sticky="w", padx=20)
+
+        # 新增开关
+        midnight_var = tk.BooleanVar(value=CONFIG.force_refresh_at_midnight)
+        midnight_check = ttk.Checkbutton(
+            frame,
+            text="每天 0 点强制刷新一次",
+            variable=midnight_var
+        )
+        midnight_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=10)
+
+        ttk.Label(
+            frame,
+            text="无论间隔多久，每天凌晨都会强制更新一次",
+            foreground="gray",
+            font=("Helvetica", 12)
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 10))
+
+        self.widgets["refresh.interval_minutes"] = interval_var
+        self.widgets["refresh.force_refresh_at_midnight"] = midnight_var
+
+    def create_night_tab(self, frame):
+        skip_var = tk.BooleanVar(value=CONFIG.skip_night)
+        skip_check = ttk.Checkbutton(frame, text="夜间暂停刷新", variable=skip_var)
+        skip_check.grid(row=0, column=0, columnspan=2, sticky="w", pady=10)
+
+        ttk.Label(frame, text="夜间开始时间:").grid(row=1, column=0, sticky="w", pady=5)
+        start_var = tk.IntVar(value=CONFIG.night_start)
+        start_spin = ttk.Spinbox(frame, from_=0, to=23, textvariable=start_var, width=10)
+        start_spin.grid(row=1, column=1, padx=20, pady=5, sticky="w")
+
+        ttk.Label(frame, text="夜间结束时间:").grid(row=2, column=0, sticky="w", pady=5)
+        end_var = tk.IntVar(value=CONFIG.night_end)
+        end_spin = ttk.Spinbox(frame, from_=0, to=23, textvariable=end_var, width=10)
+        end_spin.grid(row=2, column=1, padx=20, pady=5, sticky="w")
+
+        ttk.Label(frame, text="例如: 23:00 - 7:00", foreground="gray").grid(row=3, column=1, sticky="w", padx=20, pady=5)
+
+        self.widgets["night.skip_night"] = skip_var
+        self.widgets["night.night_start"] = start_var
+        self.widgets["night.night_end"] = end_var
+
+    def create_weather_tab(self, frame):
+        ttk.Label(frame, text="天气 API Key:", font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=10)
+        key_var = tk.StringVar(value=CONFIG.weather_key)
+        key_entry = ttk.Entry(frame, textvariable=key_var, width=35)
+        key_entry.grid(row=0, column=1, padx=20, pady=10, sticky="w")
+
+        api_tip = tk.Label(
+            frame,
+            text="申请 Key（点击跳转到和风天气开发文档）",
+            foreground="blue",
+            cursor="hand2",
+            font=("Helvetica", 12, "underline")
+        )
+        api_tip.grid(row=1, column=1, sticky="w", padx=20, pady=(0, 10))
+        api_tip.bind("<Button-1>", lambda e: self.open_url("https://dev.qweather.com/docs/configuration/project-and-key/"))
+
+        ttk.Label(frame, text="城市 / Location:", font=("Helvetica", 12)).grid(row=2, column=0, sticky="w", pady=10)
+        loc_var = tk.StringVar(value=CONFIG.location)
+        loc_entry = ttk.Entry(frame, textvariable=loc_var, width=35)
+        loc_entry.grid(row=2, column=1, padx=20, pady=10, sticky="w")
+
+        loc_tip = tk.Label(
+            frame,
+            text="查看中国城市列表（CSV，点击跳转）",
+            foreground="blue",
+            cursor="hand2",
+            font=("Helvetica", 12, "underline")
+        )
+        loc_tip.grid(row=3, column=1, sticky="w", padx=20, pady=(0, 5))
+        loc_tip.bind("<Button-1>", lambda e: self.open_url("https://github.com/qwd/LocationList/blob/master/China-City-List-latest.csv"))
+
+        ttk.Label(
+            frame,
+            text="城市ID（如 101010100）",
+            foreground="gray",
+            font=("Helvetica", 12)
+        ).grid(row=4, column=1, sticky="w", padx=20, pady=5)
+
+        self.widgets["weather.key"] = key_var
+        self.widgets["weather.location"] = loc_var
+
+    def create_mail_tab(self, frame):
+        enabled_var = tk.BooleanVar(value=CONFIG.mail_enabled)
+        enabled_check = ttk.Checkbutton(frame, text="启用邮件通知", variable=enabled_var, state="disabled")
+        enabled_check.grid(row=0, column=0, sticky="w", pady=10)
+
+        ttk.Label(frame, text="天气刷新后发送邮件通知（暂不支持）", foreground="gray").grid(row=1, column=0, sticky="w", pady=5)
+
+        self.widgets["mail.enabled"] = enabled_var
+
+    def save_config(self):
+        """保存所有配置"""
+        try:
+            # 只保存已创建的控件对应的值
+            if "refresh.interval_minutes" in self.widgets:
+                CONFIG.set("refresh", "interval_minutes", self.widgets["refresh.interval_minutes"].get())
+
+            if "night.skip_night" in self.widgets:
+                CONFIG.set("night", "skip_night", self.widgets["night.skip_night"].get())
+                CONFIG.set("night", "night_start", self.widgets["night.night_start"].get())
+                CONFIG.set("night", "night_end", self.widgets["night.night_end"].get())
+
+            if "weather.key" in self.widgets:
+                CONFIG.set("weather", "key", self.widgets["weather.key"].get())
+                CONFIG.set("weather", "location", self.widgets["weather.location"].get())
+
+            if "mail.enabled" in self.widgets:
+                CONFIG.set("mail", "enabled", self.widgets["mail.enabled"].get())
+
+            # 通知调度器重新计算
+            try:
+                from app.state import STATE
+                with STATE.lock:
+                    STATE.config_changed = True
+            except ImportError:
+                pass
+
+            messagebox.showinfo("成功", "配置已保存！")
+            remove_lock()
+            self.root.destroy()
+
+        except Exception as e:
+            messagebox.showerror("错误", f"保存配置失败:\n{e}")
+            remove_lock()  # 异常时也清理
+
+    def open_url(self, url: str):
+        try:
+            webbrowser.open(url, new=2)
+        except Exception as ex:
+            messagebox.showerror("无法打开链接", f"开启浏览器失败：\n{ex}")
+
+# ================== 主程序 ==================
 def main():
     existing_pid = is_gui_running()
     if existing_pid:
@@ -73,28 +311,18 @@ def main():
     write_lock()
 
     root = tk.Tk()
-    root.withdraw()          # 👈 关键 1：先隐藏
-    root.title("UpdateWeather")
+    root.withdraw()
+    root.title("UpdateWeather 配置")
     root.resizable(False, False)
 
-    width, height = 360, 240
+    width, height = 580, 420
     center_window(root, width, height)
 
-    root.deiconify()         # 👈 关键 2：再显示
+    ConfigGUI(root)
+
+    root.deiconify()
     root.lift()
     root.focus_force()
-
-    tk.Label(
-        root,
-        text="UpdateWeather",
-        font=("Helvetica", 16, "bold")
-    ).pack(pady=(30, 10))
-
-    tk.Label(
-        root,
-        text="后台天气刷新服务运行中",
-        font=("Helvetica", 12)
-    ).pack(pady=10)
 
     def on_close():
         remove_lock()
@@ -103,6 +331,24 @@ def main():
     root.protocol("WM_DELETE_WINDOW", on_close)
 
     root.mainloop()
+
+
+def launch_gui_process():
+    existing_pid = is_gui_running()
+    if existing_pid:
+        activate_existing_gui(existing_pid)
+        return
+
+    from pathlib import Path
+    root_dir = Path(__file__).resolve().parent.parent
+
+    gui_script = root_dir / "app" / "gui_process.py"
+
+    subprocess.Popen(
+        [sys.executable, str(gui_script)],
+        cwd=str(root_dir),
+        start_new_session=True,
+    )
 
 
 if __name__ == "__main__":

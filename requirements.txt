@@ -2,4 +2,4 @@ pystray
 pillow
 psutil
 hid
-requests==2.28.2
+requests

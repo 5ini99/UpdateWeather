@@ -1,4 +1,7 @@
 # app/state.py
+"""
+应用运行状态管理
+"""
 import threading
 import datetime
 
@@ -17,6 +20,9 @@ class AppState:
 
         self.key = ""
         self.location = ""
+        
+        # 配置变更标志（用于热重载）
+        self.config_changed = False
 
     def snapshot(self):
         with self.lock:

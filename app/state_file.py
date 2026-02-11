@@ -81,3 +81,13 @@ def set_config_changed(value: bool):
 def get_config_changed():
     data = load_state()
     return data.get("config_changed", False)
+
+def update_last_refresh_time(time_obj):
+    data = load_state()
+    data["last_refresh_time"] = time_obj
+    save_state(data)
+
+
+def get_last_refresh_time():
+    data = load_state()
+    return data.get("last_refresh_time")

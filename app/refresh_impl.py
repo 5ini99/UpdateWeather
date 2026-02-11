@@ -5,11 +5,14 @@ import datetime
 import os
 import subprocess
 from app.refresh_core import fetch_weather, update_cache, send_mail
+from app.state_file import update_last_refresh_time 
 
 LOG_DIR = Path.home() / ".update-weather"
-LOG_FILE = os.path.join(LOG_DIR, "refresh.log")
+LOG_FILE = LOG_DIR / "refresh.log"
 
 _refresh_lock = threading.Lock()
+_refresh_timeout_timer = None
+_is_refreshing = False 
 
 
 def notify_macos(title: str, message: str):
@@ -27,7 +30,7 @@ def notify_macos(title: str, message: str):
 
 
 def _ensure_log_dir():
-    os.makedirs(LOG_DIR, exist_ok=True)
+    LOG_DIR.mkdir(exist_ok=True)
 
 
 def _log(msg: str):
@@ -44,53 +47,65 @@ def _log(msg: str):
 
 
 def _do_refresh():
-    """
-    真正的刷新逻辑（不碰线程锁）
-    """
-    _log("开始执行：立即刷新")
+    global _refresh_timeout_timer, _is_refreshing
+
+    _is_refreshing = True  # ← 用全局标志
+
+    # 启动超时定时器（30 秒后强制释放锁）
+    def timeout_release():
+        _log("警告：刷新超时 30 秒，强制释放锁")
+        if _refresh_lock.locked():
+            _refresh_lock.release()
+
+    _refresh_timeout_timer = threading.Timer(30.0, timeout_release)
+    _refresh_timeout_timer.start()
 
     try:
         fetch_weather()
         update_cache()
         send_mail()
-
         _log("刷新完成 ✔")
-        notify_macos(
-            title="UpdateWeather",
-            message="天气刷新完成"
-        )
+        notify_macos("UpdateWeather", "天气刷新完成")
+
+        # 更新最后刷新时间到文件
+        now = datetime.datetime.now()
+        update_last_refresh_time(now)
+        _log(f"最后刷新时间已更新: {now}")
 
     except Exception as e:
         _log(f"刷新失败 ✘ {e}")
-        notify_macos(
-            title="UpdateWeather",
-            message="天气刷新失败，请查看日志"
-        )
+        notify_macos("UpdateWeather", "天气刷新失败，请查看日志")
+
+    finally:
+        _is_refreshing = False
+        if _refresh_timeout_timer:
+            _refresh_timeout_timer.cancel()
+        if _refresh_lock.locked():
+            _refresh_lock.release()
+        _log("刷新锁已释放")
+
 
 def run_refresh_async():
-    """
-    对外入口：托盘 / GUI / 定时任务
-    同一时间只允许一个刷新
-    """
+    try:
+        # 阻塞等待锁，最多等 5 秒
+        if not _refresh_lock.acquire(timeout=5):
+            _log("刷新请求超时：已有刷新执行超过 5 秒")
+            notify_macos("UpdateWeather", "刷新正在进行中，超时未完成")
+            return
 
-    # 非阻塞抢锁
-    if not _refresh_lock.acquire(blocking=False):
-        _log("刷新请求被忽略：已有刷新正在执行")
-        notify_macos(
-            title="UpdateWeather",
-            message="刷新正在进行中，请稍后再试"
-        )
-        return
+        _log("锁获取成功，开始刷新")
 
-    def runner():
-        try:
-            _do_refresh()
-        finally:
-            _refresh_lock.release()
-            _log("刷新锁已释放")
+        def runner():
+            try:
+                _do_refresh()
+            except Exception as e:
+                _log(f"刷新线程异常: {e}")
+            finally:
+                if _refresh_lock.locked():
+                    _refresh_lock.release()
+                _log("刷新锁已释放")
 
-    threading.Thread(
-        target=runner,
-        name="UpdateWeather-Refresh",
-        daemon=True
-    ).start()
+        threading.Thread(target=runner, daemon=True).start()
+
+    except Exception as e:
+        _log(f"刷新启动失败: {e}")

@@ -10,6 +10,7 @@ import sys
 import subprocess
 from pathlib import Path
 import webbrowser
+import gc
 
 from app.state_file import get_next_refresh_time
 
@@ -110,6 +111,10 @@ class ConfigGUI:
         self.root = root
         self.widgets = {}
 
+        # 强制使用 clam 主题（macOS 下最快）
+        # style = ttk.Style()
+        # style.theme_use('clam')  # 或 'alt'、'default'，clam 通常最快
+        
         main_frame = ttk.Frame(root, padding="10")
         main_frame.pack(fill="both", expand=True)
 
@@ -156,6 +161,9 @@ class ConfigGUI:
         # 每 10 秒刷新一次状态（避免频繁刷新导致卡顿）
         self.root.after(10000, self.periodic_update_status)
 
+        self.root.update_idletasks()
+        gc.collect()
+
     def update_status_label(self):
         try:
             from app.state_file import get_next_refresh_time
@@ -190,7 +198,7 @@ class ConfigGUI:
         frame = ttk.Frame(self.notebook, padding="20")
         self.notebook.add(frame, text="刷新设置")
 
-        ttk.Label(frame, text="刷新间隔（分钟）:", font=("Helvetica", 12)).grid(row=0, column=0, sticky="w", pady=10)
+        ttk.Label(frame, text="刷新间隔（分钟）:", font=("Helvetica", 11)).grid(row=0, column=0, sticky="w", pady=10)
         interval_var = tk.IntVar(value=CONFIG.refresh_interval_minutes)
         interval_spin = ttk.Spinbox(frame, from_=1, to=1440, textvariable=interval_var, width=15)
         interval_spin.grid(row=0, column=1, padx=20, pady=10)
@@ -209,7 +217,7 @@ class ConfigGUI:
             frame,
             text="无论间隔多久，每天凌晨都会强制更新一次",
             foreground="gray",
-            font=("Helvetica", 12)
+            font=("Helvetica", 11)
         ).grid(row=3, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 10))
 
         self.widgets["refresh.interval_minutes"] = interval_var
@@ -253,12 +261,12 @@ class ConfigGUI:
             text="申请 Key（点击跳转到和风天气开发文档）",
             foreground="blue",
             cursor="hand2",
-            font=("Helvetica", 12, "underline")
+            font=("Helvetica", 11, "underline")
         )
         api_tip.grid(row=1, column=1, sticky="w", padx=20, pady=(0, 10))
         api_tip.bind("<Button-1>", lambda e: self.open_url("https://dev.qweather.com/docs/configuration/project-and-key/"))
 
-        ttk.Label(frame, text="城市 / Location:", font=("Helvetica", 12)).grid(row=2, column=0, sticky="w", pady=10)
+        ttk.Label(frame, text="城市 / Location:", font=("Helvetica", 11)).grid(row=2, column=0, sticky="w", pady=10)
         loc_var = tk.StringVar(value=CONFIG.location)
         loc_entry = ttk.Entry(frame, textvariable=loc_var, width=35)
         loc_entry.grid(row=2, column=1, padx=20, pady=10, sticky="w")
@@ -268,7 +276,7 @@ class ConfigGUI:
             text="查看中国城市列表（CSV，点击跳转）",
             foreground="blue",
             cursor="hand2",
-            font=("Helvetica", 12, "underline")
+            font=("Helvetica", 11, "underline")
         )
         loc_tip.grid(row=3, column=1, sticky="w", padx=20, pady=(0, 5))
         loc_tip.bind("<Button-1>", lambda e: self.open_url("https://github.com/qwd/LocationList/blob/master/China-City-List-latest.csv"))
@@ -277,7 +285,7 @@ class ConfigGUI:
             frame,
             text="城市ID（如 101010100）",
             foreground="gray",
-            font=("Helvetica", 12)
+            font=("Helvetica", 11)
         ).grid(row=4, column=1, sticky="w", padx=20, pady=5)
 
         self.widgets["weather.key"] = key_var
@@ -311,15 +319,11 @@ class ConfigGUI:
 
             CONFIG.set("mail", "enabled", self.widgets["mail.enabled"].get())
 
-            # 通知调度器重新计算
-            try:
-                from app.state import STATE
-                with STATE.lock:
-                    STATE.config_changed = True
-            except ImportError:
-                pass
+            # 通知调度器重新计算（用文件标志）
+            from app.state_file import set_config_changed
+            set_config_changed(True)
 
-            messagebox.showinfo("成功", "配置已保存！")
+            # messagebox.showinfo("成功", "配置已保存！")
             remove_lock()
             self.root.destroy()
 

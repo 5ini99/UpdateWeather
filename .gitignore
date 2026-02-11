@@ -55,6 +55,7 @@ logs/
 htmlcov/
 .tox/
 .hypothesis/
+output.png
 
 # Distribution / Packaging
 *.dmg

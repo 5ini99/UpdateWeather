@@ -669,6 +669,8 @@ if __name__ == '__main__':
     PID = 0x615e
 
     devices = hid.enumerate(VID, PID)
+    if not devices:
+        raise RuntimeError("墨水屏未连接，跳过本次刷新")
 
     path = None
     for info in devices:

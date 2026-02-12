@@ -1,45 +1,55 @@
 # app/refresh_core.py
+import subprocess
+import sys
+import os
 import time
-import io
-import contextlib
-import runpy
+import datetime
+
 from app.utils import resource_path
 
 LEGACY_SCRIPT = resource_path("legacy/update_weather.py")
 
-
 def fetch_weather():
     """
-    执行原始 update_weather.py 脚本（进程内执行）
-
-    为什么不再用 subprocess + sys.executable：
-    - 在 PyInstaller 打包环境中，sys.executable 通常是主程序本体
-    - 再次 subprocess 调用会递归拉起应用，导致“刷新卡住/进程堆积”
-
-    改为 runpy.run_path(..., run_name="__main__") 可在当前进程内执行脚本，
-    同时保留脚本里 __name__ == '__main__' 的刷新逻辑。
+    执行你原来的 update-weather 脚本
+    = 真正干活的核心
     """
-    if not LEGACY_SCRIPT.exists():
+    if not os.path.exists(LEGACY_SCRIPT):
         raise RuntimeError(f"未找到原始脚本: {LEGACY_SCRIPT}")
 
     start = time.time()
-    stdout_buf = io.StringIO()
-    stderr_buf = io.StringIO()
+    from pathlib import Path
+    root_dir = Path(__file__).resolve().parent.parent  # gui_process.py → app → root
 
-    try:
-        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
-            runpy.run_path(str(LEGACY_SCRIPT), run_name="__main__")
-    except Exception as e:
+    gui_script = root_dir / "app" / "gui_process.py"
+
+    # ✅ 关键修复：使用 -m 参数 + 模块名
+    # 而不是直接传文件路径
+    # 这样 Python 会正确识别 if __name__ == "__main__" 块
+    
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root_dir) + os.pathsep + env.get("PYTHONPATH", "")
+
+    result = subprocess.run(
+        [sys.executable, LEGACY_SCRIPT],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(root_dir),
+        env=env,
+        start_new_session=True,
+    )
+
+    if result.returncode != 0:
         raise RuntimeError(
             "刷新脚本执行失败\n"
-            f"STDOUT:\n{stdout_buf.getvalue()}\n"
-            f"STDERR:\n{stderr_buf.getvalue()}\n"
-            f"EXCEPTION:\n{e}"
+            f"STDOUT:\n{result.stdout}\n"
+            f"STDERR:\n{result.stderr}"
         )
 
     return {
         "duration": round(time.time() - start, 2),
-        "stdout": stdout_buf.getvalue(),
+        "stdout": result.stdout
     }
 
 

@@ -391,7 +391,7 @@ def launch_gui_process():
         # ✅ 改用 -m app.gui_process 方式启动
         # 这样会执行 if __name__ == "__main__" 块中的代码
         subprocess.Popen(
-            [sys.executable, "-m", "app.gui_process"],
+            [sys.executable, "main.py", "--gui"],
             cwd=str(root_dir),
             env=env,
             start_new_session=True,

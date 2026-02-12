@@ -1,6 +1,7 @@
-# app/gui_process.py
+# app/gui_process.py（真正最终修复版）
 """
 完整的配置 GUI 实现（独立进程运行）
+关键修复：子进程只在必要时启动，而且不会重复初始化
 """
 import datetime
 import tkinter as tk
@@ -14,17 +15,15 @@ import gc
 
 from app.state_file import get_next_refresh_time
 
-# 取得本文件 (gui_process.py) 所在的目录 → app/
+# 取得项目根目录
 this_file_dir = Path(__file__).resolve().parent
-
-# 取得项目根目录（app/ 的上层）
 project_root = this_file_dir.parent
 
-# 如果项目根目录还没在 sys.path 里，加进去（优先位置）
+# 如果项目根目录还没在 sys.path 里，加进去
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# 同时强制把 cwd 也设成根目录（双保险）
+# 同时强制把 cwd 也设成根目录
 os.chdir(project_root)
 
 from app.config import CONFIG, CONFIG_SCHEMA
@@ -111,10 +110,6 @@ class ConfigGUI:
         self.root = root
         self.widgets = {}
 
-        # 强制使用 clam 主题（macOS 下最快）
-        # style = ttk.Style()
-        # style.theme_use('clam')  # 或 'alt'、'default'，clam 通常最快
-        
         main_frame = ttk.Frame(root, padding="10")
         main_frame.pack(fill="both", expand=True)
 
@@ -129,7 +124,7 @@ class ConfigGUI:
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.pack(fill="both", expand=True)
 
-        # 一次性创建所有 Tab 内容（最快、最稳）
+        # 一次性创建所有 Tab 内容
         self.create_refresh_tab()
         self.create_night_tab()
         self.create_weather_tab()
@@ -158,7 +153,7 @@ class ConfigGUI:
         # 窗口打开后立即更新状态
         self.update_status_label()
 
-        # 每 10 秒刷新一次状态（避免频繁刷新导致卡顿）
+        # 每 10 秒刷新一次状态
         self.root.after(10000, self.periodic_update_status)
 
         self.root.update_idletasks()
@@ -192,8 +187,8 @@ class ConfigGUI:
     def periodic_update_status(self):
         """定时更新状态"""
         self.update_status_label()
-        self.root.after(10000, self.periodic_update_status)  # 每 10 秒一次
-        
+        self.root.after(10000, self.periodic_update_status)
+
     def create_refresh_tab(self):
         frame = ttk.Frame(self.notebook, padding="20")
         self.notebook.add(frame, text="刷新设置")
@@ -204,7 +199,6 @@ class ConfigGUI:
         interval_spin.grid(row=0, column=1, padx=20, pady=10)
         ttk.Label(frame, text="建议: 30-120 分钟", foreground="gray").grid(row=1, column=1, sticky="w", padx=20)
 
-        # 每天 0 点强制刷新开关
         midnight_var = tk.BooleanVar(value=CONFIG.force_refresh_at_midnight)
         midnight_check = ttk.Checkbutton(
             frame,
@@ -306,7 +300,6 @@ class ConfigGUI:
     def save_config(self):
         """保存所有配置"""
         try:
-            # 所有控件都已创建，可以直接取值
             CONFIG.set("refresh", "interval_minutes", self.widgets["refresh.interval_minutes"].get())
             CONFIG.set("refresh", "force_refresh_at_midnight", self.widgets["refresh.force_refresh_at_midnight"].get())
 
@@ -319,11 +312,9 @@ class ConfigGUI:
 
             CONFIG.set("mail", "enabled", self.widgets["mail.enabled"].get())
 
-            # 通知调度器重新计算（用文件标志）
             from app.state_file import set_config_changed
             set_config_changed(True)
 
-            # messagebox.showinfo("成功", "配置已保存！")
             remove_lock()
             self.root.destroy()
 
@@ -384,18 +375,30 @@ def launch_gui_process():
 
     gui_script = root_dir / "app" / "gui_process.py"
 
-    # 强制设置 PYTHONPATH 环境变量，让子进程能找到 app 包
+    # ✅ 关键修复：使用 -m 参数 + 模块名
+    # 而不是直接传文件路径
+    # 这样 Python 会正确识别 if __name__ == "__main__" 块
+    
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root_dir) + os.pathsep + env.get("PYTHONPATH", "")
 
-    print(f"[Launch] 以 PYTHONPATH={env['PYTHONPATH']} 启动 GUI，cwd={root_dir}")
+    print(f"[Launch GUI] 启动独立 GUI 进程")
+    print(f"  可执行文件: {sys.executable}")
+    print(f"  GUI 脚本: {gui_script}")
+    print(f"  工作目录: {root_dir}")
 
-    subprocess.Popen(
-        [sys.executable, str(gui_script)],
-        cwd=str(root_dir),
-        env=env,  # ← 关键：传修改后的环境变量
-        start_new_session=True,
-    )
+    try:
+        # ✅ 改用 -m app.gui_process 方式启动
+        # 这样会执行 if __name__ == "__main__" 块中的代码
+        subprocess.Popen(
+            [sys.executable, "-m", "app.gui_process"],
+            cwd=str(root_dir),
+            env=env,
+            start_new_session=True,
+        )
+        print("[Launch GUI] GUI 进程启动成功")
+    except Exception as e:
+        print(f"[Launch GUI] 启动 GUI 进程失败: {e}")
 
 
 if __name__ == "__main__":

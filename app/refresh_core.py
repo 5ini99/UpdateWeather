@@ -1,42 +1,45 @@
 # app/refresh_core.py
-import subprocess
-import sys
-import os
 import time
-import datetime
+import io
+import contextlib
+import runpy
+from app.utils import resource_path
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+LEGACY_SCRIPT = resource_path("legacy/update_weather.py")
 
-# 你原来的完整脚本路径（按你真实文件名改一次即可）
-LEGACY_SCRIPT = os.path.join(BASE_DIR, "legacy", "update_weather.py")
 
 def fetch_weather():
     """
-    执行你原来的 update-weather 脚本
-    = 真正干活的核心
+    执行原始 update_weather.py 脚本（进程内执行）
+
+    为什么不再用 subprocess + sys.executable：
+    - 在 PyInstaller 打包环境中，sys.executable 通常是主程序本体
+    - 再次 subprocess 调用会递归拉起应用，导致“刷新卡住/进程堆积”
+
+    改为 runpy.run_path(..., run_name="__main__") 可在当前进程内执行脚本，
+    同时保留脚本里 __name__ == '__main__' 的刷新逻辑。
     """
-    if not os.path.exists(LEGACY_SCRIPT):
+    if not LEGACY_SCRIPT.exists():
         raise RuntimeError(f"未找到原始脚本: {LEGACY_SCRIPT}")
 
     start = time.time()
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
 
-    result = subprocess.run(
-        [sys.executable, LEGACY_SCRIPT],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-
-    if result.returncode != 0:
+    try:
+        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+            runpy.run_path(str(LEGACY_SCRIPT), run_name="__main__")
+    except Exception as e:
         raise RuntimeError(
             "刷新脚本执行失败\n"
-            f"STDOUT:\n{result.stdout}\n"
-            f"STDERR:\n{result.stderr}"
+            f"STDOUT:\n{stdout_buf.getvalue()}\n"
+            f"STDERR:\n{stderr_buf.getvalue()}\n"
+            f"EXCEPTION:\n{e}"
         )
 
     return {
         "duration": round(time.time() - start, 2),
-        "stdout": result.stdout
+        "stdout": stdout_buf.getvalue(),
     }
 
 

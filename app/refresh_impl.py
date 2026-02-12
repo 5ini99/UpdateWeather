@@ -86,26 +86,36 @@ def _do_refresh():
 
 
 def run_refresh_async():
+    """
+    异步刷新 - 带去重控制
+    """
+    global _is_refreshing
+    
+    # 首先检查是否已在执行
+    if _is_refreshing:
+        _log("⚠️ 刷新已在进行中，忽略本次请求")
+        notify_macos("UpdateWeather", "刷新正在进行中，请稍候...")
+        return
+    
     try:
-        # 阻塞等待锁，最多等 5 秒
-        if not _refresh_lock.acquire(timeout=5):
-            _log("刷新请求超时：已有刷新执行超过 5 秒")
-            notify_macos("UpdateWeather", "刷新正在进行中，超时未完成")
+        # 尝试获取锁，最多等 2 秒
+        if not _refresh_lock.acquire(timeout=2):
+            _log("⚠️ 刷新请求被拒：已有刷新执行超过 2 秒")
+            notify_macos("UpdateWeather", "刷新正在进行中，请稍候...")
             return
 
-        _log("锁获取成功，开始刷新")
+        _log("✓ 锁获取成功，开始刷新")
 
         def runner():
             try:
                 _do_refresh()
             except Exception as e:
-                _log(f"刷新线程异常: {e}")
+                _log(f"❌ 刷新线程异常: {e}")
             finally:
                 if _refresh_lock.locked():
                     _refresh_lock.release()
-                _log("刷新锁已释放")
 
         threading.Thread(target=runner, daemon=True).start()
 
     except Exception as e:
-        _log(f"刷新启动失败: {e}")
+        _log(f"❌ 刷新启动失败: {e}")

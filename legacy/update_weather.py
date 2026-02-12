@@ -1,4 +1,5 @@
 import configparser
+import sys
 import os
 import requests
 import datetime
@@ -20,7 +21,11 @@ USER_CONFIG_DIR = Path.home() / ".update-weather"
 USER_CONFIG_DIR.mkdir(exist_ok=True)
 CONFIG_PATH = USER_CONFIG_DIR / "config.ini"
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# PyInstaller 打包后临时目录
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
 
 config = configparser.ConfigParser()
 config.read(CONFIG_PATH, encoding="utf-8")

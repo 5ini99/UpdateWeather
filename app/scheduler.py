@@ -75,6 +75,11 @@ def start_scheduler():
             print("[Scheduler] 配置变更，重新加载并重新计算")
             CONFIG.reload()
             set_config_changed(False)
+
+            if CONFIG.refresh_immediately_on_config_change and not _is_night(now):
+                print("[Scheduler] 配置变更后立即刷新一次")
+                run_refresh_async()
+                
             next_time = _calc_next_time(now)
             update_next_refresh_time(next_time)
 

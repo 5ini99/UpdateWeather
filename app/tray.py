@@ -1,5 +1,4 @@
 import datetime
-from app.state_file import get_next_refresh_time
 import pystray
 import threading
 import time
@@ -7,6 +6,7 @@ from app.icon import create_tray_image
 from app.refresh_impl import run_refresh_async
 from app.gui_process import launch_gui_process
 from app.autostart import toggle_autostart, is_autostart_enabled
+from app.state_file import get_next_refresh_time, get_last_refresh_time
 
 # 防止点击时频繁触发
 _last_refresh_click = 0
@@ -16,17 +16,25 @@ _click_debounce_seconds = 2
 
 def _build_tooltip_text() -> str:
     next_time = get_next_refresh_time()
+    last_time = get_last_refresh_time()
+
     if next_time is None:
-        return "UpdateWeather\n下次刷新：计算中..."
+        next_line = "下次刷新：计算中..."
+    else:
+        now = datetime.datetime.now()
+        time_str = next_time.strftime("%Y-%m-%d %H:%M")
+        if next_time > now:
+            remain = int((next_time - now).total_seconds() // 60)
+            next_line = f"下次刷新：{time_str}（约 {remain} 分钟后）"
+        else:
+            next_line = f"下次刷新：{time_str}（即将执行）"
 
-    now = datetime.datetime.now()
-    time_str = next_time.strftime("%Y-%m-%d %H:%M")
+    if last_time is None:
+        last_line = "上次刷新：暂无"
+    else:
+        last_line = f"上次刷新：{last_time.strftime('%Y-%m-%d %H:%M')}"
 
-    if next_time > now:
-        remain = int((next_time - now).total_seconds() // 60)
-        return f"UpdateWeather\n下次刷新：{time_str}（约 {remain} 分钟后）"
-
-    return f"UpdateWeather\n下次刷新：{time_str}（即将执行）"
+    return f"UpdateWeather\n{next_line}\n{last_line}"
 
 
 def _start_tooltip_updater(icon: pystray.Icon):

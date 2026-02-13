@@ -214,8 +214,17 @@ class ConfigGUI:
             font=("Helvetica", 11)
         ).grid(row=3, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 10))
 
+        immediate_var = tk.BooleanVar(value=CONFIG.refresh_immediately_on_config_change)
+        immediate_check = ttk.Checkbutton(
+            frame,
+            text="保存配置后立即刷新一次",
+            variable=immediate_var
+        )
+        immediate_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=4)
+
         self.widgets["refresh.interval_minutes"] = interval_var
         self.widgets["refresh.force_refresh_at_midnight"] = midnight_var
+        self.widgets["refresh.refresh_immediately_on_config_change"] = immediate_var
 
     def create_night_tab(self):
         frame = ttk.Frame(self.notebook, padding="20")
@@ -302,6 +311,12 @@ class ConfigGUI:
         try:
             CONFIG.set("refresh", "interval_minutes", self.widgets["refresh.interval_minutes"].get())
             CONFIG.set("refresh", "force_refresh_at_midnight", self.widgets["refresh.force_refresh_at_midnight"].get())
+
+            CONFIG.set(
+                "refresh",
+                "refresh_immediately_on_config_change",
+                self.widgets["refresh.refresh_immediately_on_config_change"].get()
+            )
 
             CONFIG.set("night", "skip_night", self.widgets["night.skip_night"].get())
             CONFIG.set("night", "night_start", self.widgets["night.night_start"].get())

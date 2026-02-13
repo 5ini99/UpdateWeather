@@ -24,7 +24,12 @@ CONFIG_SCHEMA = {
             "type": bool,
             "default": True,                    # 默认开启
             "label": "每天 0 点强制刷新一次",
-        }
+        },
+        "refresh_immediately_on_config_change": {
+            "type": bool,
+            "default": False,
+            "label": "保存配置后立即刷新一次",
+        },
     },
     "night": {
         "skip_night": {
@@ -76,7 +81,7 @@ class AppConfig:
         with self.lock:
             self.parser = configparser.ConfigParser()
             self._load_or_init()
-            
+
     # ================== 初始化 & 兼容老配置 ==================
     def _load_or_init(self):
         if CONFIG_PATH.exists():
@@ -135,6 +140,10 @@ class AppConfig:
     @property
     def force_refresh_at_midnight(self) -> bool:
         return self.get("refresh", "force_refresh_at_midnight")
+
+    @property
+    def refresh_immediately_on_config_change(self) -> bool:
+        return self.get("refresh", "refresh_immediately_on_config_change")
 
     @property
     def skip_night(self) -> bool:

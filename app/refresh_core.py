@@ -1,4 +1,5 @@
 # app/refresh_core.py
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -14,8 +15,17 @@ def fetch_weather():
     """
     start = time.time()
 
+    # 开发环境与打包环境参数不同：
+    # - 开发环境: python main.py --refresh
+    # - PyInstaller: <app_executable> --refresh
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--refresh"]
+    else:
+        project_root = Path(__file__).resolve().parent.parent
+        cmd = [sys.executable, str(project_root / "main.py"), "--refresh"]
+
     result = subprocess.run(
-        [sys.executable, "main.py", "--refresh"],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

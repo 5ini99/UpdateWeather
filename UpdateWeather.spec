@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('img', 'img'), ('font', 'font'), ('legacy', 'legacy')]
 binaries = []
-hiddenimports = ['pystray', 'PIL', 'PIL.Image', 'PIL.ImageDraw', 'PIL.ImageFont', 'psutil', 'requests', 'hid', 'threading', 'configparser', 'datetime']
+hiddenimports = ['pystray', 'PIL', 'PIL.Image', 'PIL.ImageDraw', 'PIL.ImageFont', 'psutil', 'requests', 'hid', 'threading', 'configparser', 'tkinter', 'tkinter.simpledialog', 'tkinter.messagebox', 'tkinter.filedialog', 'datetime']
 tmp_ret = collect_all('app')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 

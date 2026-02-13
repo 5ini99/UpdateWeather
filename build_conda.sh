@@ -65,6 +65,10 @@ CMD="python -m PyInstaller \
   --hidden-import=hid \
   --hidden-import=threading \
   --hidden-import=configparser \
+  --hidden-import=tkinter \
+  --hidden-import=tkinter.simpledialog \
+  --hidden-import=tkinter.messagebox \
+  --hidden-import=tkinter.filedialog \
   --hidden-import=datetime"
 
 # 添加数据文件夹

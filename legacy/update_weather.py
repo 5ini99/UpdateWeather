@@ -9,11 +9,12 @@ import hid
 import tkinter as tk
 from psutil import *
 from PIL import Image, ImageDraw, ImageFont
-from tkinter import messagebox
-from pathlib import Path
-from tkinter import simpledialog, messagebox
 
+from pathlib import Path
+
+import tkinter as tk
 import tkinter.simpledialog as simpledialog
+import tkinter.messagebox as messagebox
 
 config = configparser.ConfigParser()
 

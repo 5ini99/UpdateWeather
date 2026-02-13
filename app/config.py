@@ -71,6 +71,12 @@ class AppConfig:
         self.parser = configparser.ConfigParser()
         self._load_or_init()
 
+    def reload(self):
+        """从磁盘重新加载配置（给其他进程更新后的场景用）"""
+        with self.lock:
+            self.parser = configparser.ConfigParser()
+            self._load_or_init()
+            
     # ================== 初始化 & 兼容老配置 ==================
     def _load_or_init(self):
         if CONFIG_PATH.exists():

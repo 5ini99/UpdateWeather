@@ -70,7 +70,8 @@ def start_scheduler():
 
         # 检查配置变更
         if get_config_changed():
-            print("[Scheduler] 配置变更，重新计算")
+            print("[Scheduler] 配置变更，重新加载并重新计算")
+            CONFIG.reload()
             set_config_changed(False)
             next_time = _calc_next_time(now)
             update_next_refresh_time(next_time)

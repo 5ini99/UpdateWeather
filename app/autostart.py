@@ -43,6 +43,17 @@ def toggle_autostart():
         enable_autostart()
 
 
+def _unload_quiet():
+    """静默卸载（允许未加载场景）"""
+    result = subprocess.run(
+        ["launchctl", "unload", str(PLIST_FILE)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode
+
+
 def enable_autostart():
     """启用开机自启"""
     LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -61,11 +72,16 @@ def enable_autostart():
         with open(PLIST_FILE, "wb") as f:
             plistlib.dump(plist_data, f)
 
-        # 先尝试卸载旧配置，避免重复加载报错
-        subprocess.run(["launchctl", "unload", str(PLIST_FILE)], check=False)
+        # 先尝试卸载旧配置，避免重复加载报错（静默）
+        _unload_quiet()
 
         # 加载到 launchctl
-        subprocess.run(["launchctl", "load", "-w", str(PLIST_FILE)], check=True)
+        subprocess.run(
+            ["launchctl", "load", "-w", str(PLIST_FILE)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         print("开机自启已启用")
     except Exception as e:
         print(f"启用开机自启失败: {e}")
@@ -77,19 +93,8 @@ def disable_autostart():
         return
 
     try:
-        unload_result = subprocess.run(
-            ["launchctl", "unload", str(PLIST_FILE)],
-            check=False,
-            capture_output=True,
-            text=True
-        )
-        if unload_result.returncode != 0:
-            # 这里常见是“之前没加载过”，不算错误
-            err = (unload_result.stderr or "").strip()
-            if err:
-                print(f"[Autostart] 忽略 unload 提示: {err}")
-                
-        PLIST_FILE.unlink()
+        _unload_quiet()
+        PLIST_FILE.unlink(missing_ok=True)
         print("开机自启已取消")
     except Exception as e:
         print(f"取消开机自启失败: {e}")

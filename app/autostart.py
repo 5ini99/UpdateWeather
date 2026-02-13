@@ -2,7 +2,6 @@
 """
 macOS 开机自启管理（使用 Launch Agents）
 """
-import os
 import subprocess
 from pathlib import Path
 import plistlib
@@ -11,20 +10,20 @@ import sys
 # Launch Agents 路径
 LAUNCH_AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
 PLIST_FILE = LAUNCH_AGENTS_DIR / "com.updateweather.plist"
+LOG_DIR = Path.home() / ".update-weather"
 
 
-def get_program_path():
+def get_program_arguments():
     """
-    获取要开机运行的程序路径
-    - 开发时：main.py 的绝对路径
-    - 打包后：sys.executable 或 .app 的路径
+    获取 LaunchAgent 的 ProgramArguments
+    - 打包环境: [<app_executable>]
+    - 开发环境: [python3, main.py]
     """
     if getattr(sys, 'frozen', False):
-        # PyInstaller 打包后的路径
-        return sys.executable
-    else:
-        # 开发时用 main.py
-        return str(Path(__file__).resolve().parent.parent / "main.py")
+        return [sys.executable]
+
+    main_py = str(Path(__file__).resolve().parent.parent / "main.py")
+    return ["/usr/bin/python3", main_py]
 
 
 def is_autostart_enabled():
@@ -47,22 +46,23 @@ def toggle_autostart():
 def enable_autostart():
     """启用开机自启"""
     LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
-
-    program_path = get_program_path()
-    python_path = sys.executable if getattr(sys, 'frozen', False) else "/usr/bin/python3"
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     plist_data = {
         "Label": "com.updateweather",
-        "ProgramArguments": [python_path, program_path],
+        "ProgramArguments": get_program_arguments(),
         "RunAtLoad": True,
         "KeepAlive": False,
-        "StandardOutPath": str(Path.home() / ".updateweather" / "autostart.log"),
-        "StandardErrorPath": str(Path.home() / ".updateweather" / "autostart.err"),
+        "StandardOutPath": str(LOG_DIR / "autostart.log"),
+        "StandardErrorPath": str(LOG_DIR / "autostart.err"),
     }
 
     try:
         with open(PLIST_FILE, "wb") as f:
             plistlib.dump(plist_data, f)
+
+        # 先尝试卸载旧配置，避免重复加载报错
+        subprocess.run(["launchctl", "unload", str(PLIST_FILE)], check=False)
 
         # 加载到 launchctl
         subprocess.run(["launchctl", "load", "-w", str(PLIST_FILE)], check=True)
@@ -77,7 +77,18 @@ def disable_autostart():
         return
 
     try:
-        subprocess.run(["launchctl", "unload", str(PLIST_FILE)], check=True)
+        unload_result = subprocess.run(
+            ["launchctl", "unload", str(PLIST_FILE)],
+            check=False,
+            capture_output=True,
+            text=True
+        )
+        if unload_result.returncode != 0:
+            # 这里常见是“之前没加载过”，不算错误
+            err = (unload_result.stderr or "").strip()
+            if err:
+                print(f"[Autostart] 忽略 unload 提示: {err}")
+                
         PLIST_FILE.unlink()
         print("开机自启已取消")
     except Exception as e:

@@ -220,7 +220,7 @@ class ConfigGUI:
             text="保存配置后立即刷新一次",
             variable=immediate_var
         )
-        immediate_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=4)
+        immediate_check.grid(row=4, column=0, columnspan=2, sticky="w", pady=4)
 
         self.widgets["refresh.interval_minutes"] = interval_var
         self.widgets["refresh.force_refresh_at_midnight"] = midnight_var

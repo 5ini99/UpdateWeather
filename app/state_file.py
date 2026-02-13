@@ -43,20 +43,31 @@ def load_state():
 
 
 def save_state(data):
-    """保存状态到文件"""
-    # 序列化 datetime
+    """保存状态到文件（原子写入，避免空文件/半文件）"""
     serializable = data.copy()
     if serializable.get("next_refresh_time"):
         serializable["next_refresh_time"] = serializable["next_refresh_time"].isoformat()
     if serializable.get("last_refresh_time"):
         serializable["last_refresh_time"] = serializable["last_refresh_time"].isoformat()
 
+    tmp_file = STATE_FILE.with_suffix(".json.tmp")
     try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(serializable, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+
+        # 原子替换：要么旧文件，要么新文件，不会出现半文件
+        tmp_file.replace(STATE_FILE)
+
         print(f"[StateFile] 状态已保存: next_refresh_time={data.get('next_refresh_time')}")
     except Exception as e:
         print(f"[StateFile] 保存状态失败: {e}")
+        try:
+            if tmp_file.exists():
+                tmp_file.unlink()
+        except Exception:
+            pass
 
 
 def update_next_refresh_time(new_time: datetime.datetime | None):

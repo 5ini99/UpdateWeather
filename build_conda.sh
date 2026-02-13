@@ -93,6 +93,18 @@ eval "$CMD"
 if [ $? -eq 0 ]; then
   echo ""
   echo "✓ 构建成功！"
+
+  # macOS: 隐藏 Dock 图标（仅在托盘显示）
+  APP_BUNDLE="./dist/${APP_NAME}.app"
+  PLIST_PATH="${APP_BUNDLE}/Contents/Info.plist"
+  if [ -f "$PLIST_PATH" ]; then
+    echo "配置 macOS 应用为 AgentApp（隐藏 Dock 图标）..."
+    /usr/libexec/PlistBuddy -c "Delete :LSUIElement" "$PLIST_PATH" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$PLIST_PATH"
+  else
+    echo "⚠️ 未找到 $PLIST_PATH，跳过 Dock 隐藏配置"
+  fi
+
   echo ""
   echo "输出应用位置:"
   echo "  ./dist/${APP_NAME}/${APP_NAME}"

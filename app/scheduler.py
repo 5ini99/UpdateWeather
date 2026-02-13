@@ -57,13 +57,15 @@ def start_scheduler():
     """
     last_force_refresh_date = None
 
-    # 启动时立即计算一次下次刷新时间（关键修复）
+    # 启动时先主动刷新一次（用户要求：每次打开 app 刷新）
     now = datetime.datetime.now()
-    current_next = get_next_refresh_time()
-    if current_next is None:
-        next_time = _calc_next_time(now)
-        update_next_refresh_time(next_time)
-        print(f"[Scheduler] 启动初始化: {next_time}")
+    print("[Scheduler] 启动即刷新一次")
+    run_refresh_async()
+
+    # 然后计算并记录下一次刷新时间
+    next_time = _calc_next_time(now)
+    update_next_refresh_time(next_time)
+    print(f"[Scheduler] 启动初始化: {next_time}")
 
     while True:
         now = datetime.datetime.now()

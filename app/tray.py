@@ -1,3 +1,5 @@
+import datetime
+from app.state_file import get_next_refresh_time
 import pystray
 import threading
 import time
@@ -10,6 +12,35 @@ from app.autostart import toggle_autostart, is_autostart_enabled
 _last_refresh_click = 0
 _last_settings_click = 0
 _click_debounce_seconds = 2
+
+
+def _build_tooltip_text() -> str:
+    next_time = get_next_refresh_time()
+    if next_time is None:
+        return "UpdateWeather\n下次刷新：计算中..."
+
+    now = datetime.datetime.now()
+    time_str = next_time.strftime("%Y-%m-%d %H:%M")
+
+    if next_time > now:
+        remain = int((next_time - now).total_seconds() // 60)
+        return f"UpdateWeather\n下次刷新：{time_str}（约 {remain} 分钟后）"
+
+    return f"UpdateWeather\n下次刷新：{time_str}（即将执行）"
+
+
+def _start_tooltip_updater(icon: pystray.Icon):
+    """后台定时更新托盘 tooltip。"""
+
+    def worker():
+        while True:
+            try:
+                icon.title = _build_tooltip_text()
+            except Exception:
+                pass
+            time.sleep(10)
+
+    threading.Thread(target=worker, daemon=True, name="TrayTooltipUpdater").start()
 
 def debounced_refresh():
     """防抖的刷新函数 - 2秒内只能触发一次"""
@@ -51,5 +82,9 @@ def start_tray():
         pystray.MenuItem("退出", lambda i, _: i.stop())
     )
 
-    icon = pystray.Icon("UpdateWeather", image, "UpdateWeather", menu)
+    icon = pystray.Icon("UpdateWeather", image, _build_tooltip_text(), menu)
+
+    # 启动 tooltip 定时更新
+    _start_tooltip_updater(icon)
+
     icon.run()

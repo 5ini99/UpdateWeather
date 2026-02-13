@@ -29,6 +29,7 @@ def fetch_weather():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        timeout=90
     )
 
     if result.returncode != 0:

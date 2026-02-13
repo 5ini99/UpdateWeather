@@ -23,7 +23,8 @@ def notify_macos(title: str, message: str):
                 "-e",
                 f'display notification "{message}" with title "{title}"'
             ],
-            check=False
+            check=False,
+            timeout=10
         )
     except Exception:
         pass
